@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blood Bowl Match Analyser — BB2025</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Barlow+Condensed:wght@400;600;700&family=Barlow:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d1208; --panel:#111a0d; --border:#253020; --gold:#d4a845;
+  --red:#c62828; --text:#d0e8c0; --muted:#6a8a62; --hi:#8bc34a;
+  --green1:#2d5a1b; --green2:#357a20;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:.5;}
+
+/* ── SETUP SCREEN ── */
+#setup-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px 16px;gap:20px;}
+#setup-screen h1{font-family:'Cinzel Decorative',cursive;font-size:clamp(1rem,3vw,1.6rem);color:var(--gold);text-shadow:0 0 30px rgba(212,168,69,.4);letter-spacing:2px;text-align:center;}
+#setup-screen .subtitle{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;color:var(--muted);letter-spacing:3px;text-transform:uppercase;text-align:center;}
+.setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:700px;}
+@media(max-width:560px){.setup-grid{grid-template-columns:1fr;}}
+.team-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:12px;}
+.team-card h3{font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);}
+.team-card.loaded{border-color:var(--hi);}
+.team-card.loaded h3{color:var(--hi);}
+.upload-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px dashed var(--border);border-radius:8px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);transition:all .2s;background:transparent;}
+.upload-btn:hover{border-color:var(--gold);color:var(--gold);}
+.upload-btn input{display:none;}
+.team-summary{font-size:.8rem;line-height:1.6;color:var(--text);}
+.team-summary strong{color:var(--gold);display:block;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;}
+.team-summary .race-badge{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:3px;margin-top:4px;}
+.perspective-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;width:100%;max-width:700px;}
+.perspective-row label{font-family:'Barlow Condensed',sans-serif;font-size:.75rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+.persp-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.78rem;letter-spacing:1px;padding:8px 18px;border-radius:5px;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--muted);transition:all .2s;text-transform:uppercase;}
+.persp-btn.active{background:rgba(139,195,74,.2);border-color:var(--hi);color:var(--hi);}
+.analyse-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:2px;text-transform:uppercase;padding:14px 40px;border-radius:8px;cursor:pointer;border:2px solid var(--gold);background:rgba(212,168,69,.15);color:var(--gold);transition:all .2s;}
+.analyse-btn:hover{background:rgba(212,168,69,.3);}
+.analyse-btn:disabled{opacity:.4;cursor:not-allowed;}
+.loading-msg{font-family:'Barlow Condensed',sans-serif;font-size:.85rem;color:var(--muted);letter-spacing:1px;text-align:center;min-height:1.4em;}
+
+/* ── APP SCREEN ── */
+#app-screen{display:none;}
+header{text-align:center;padding:20px 20px 12px;border-bottom:2px solid var(--border);background:linear-gradient(180deg,#090e08 0%,var(--bg) 100%);}
+header h1{font-family:'Cinzel Decorative',cursive;font-size:clamp(.9rem,2.5vw,1.4rem);color:var(--gold);letter-spacing:2px;}
+.matchup-bar{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:10px;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:700;flex-wrap:wrap;}
+.team-badge{display:flex;align-items:center;gap:6px;}
+.team-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.vs{color:var(--muted);font-size:.75rem;letter-spacing:2px;}
+.new-match-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.7rem;letter-spacing:1px;padding:5px 12px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .2s;margin-top:8px;}
+.new-match-btn:hover{border-color:var(--gold);color:var(--gold);}
+
+/* ── TABS ── */
+.tabs{display:flex;justify-content:center;gap:3px;padding:10px 12px 0;background:var(--panel);border-bottom:2px solid var(--border);flex-wrap:wrap;}
+.tab{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:1.5px;text-transform:uppercase;padding:7px 14px;border:1px solid transparent;border-bottom:none;border-radius:5px 5px 0 0;cursor:pointer;transition:all .2s;background:transparent;color:var(--muted);}
+.tab:hover{color:var(--text);border-color:var(--border);}
+.tab.active{background:var(--bg);color:var(--gold);border-color:var(--border);border-bottom:2px solid var(--bg);margin-bottom:-2px;}
+
+/* ── PAGES ── */
+.page{display:none;padding:18px 14px;max-width:1100px;margin:0 auto;animation:fadeIn .3s ease;}
+.page.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── PITCH ── */
+.pitch-wrapper{display:flex;flex-direction:column;align-items:center;gap:12px;}
+.pitch-controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+.ctrl-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.72rem;letter-spacing:1px;text-transform:uppercase;padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--muted);transition:all .2s;}
+.ctrl-btn:hover,.ctrl-btn.active{background:var(--border);color:var(--text);}
+.ctrl-btn.team-a-btn{border-color:#1b5e20;}
+.ctrl-btn.team-a-btn:hover,.ctrl-btn.team-a-btn.active{background:#1b5e20;color:#c8f0c0;border-color:#4caf50;}
+.ctrl-btn.team-b-btn{border-color:#5d3a00;}
+.ctrl-btn.team-b-btn:hover,.ctrl-btn.team-b-btn.active{background:#5d3a00;color:#fff3cd;border-color:#ffa000;}
+#pos-display{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;color:var(--gold);text-align:center;min-height:1.2em;letter-spacing:1px;}
+.pitch-container{position:relative;width:100%;max-width:640px;}
+#pitch-canvas{display:block;width:100%;cursor:pointer;border:2px solid var(--border);border-radius:6px;touch-action:none;}
+.pitch-legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:.72rem;color:var(--muted);}
+.legend-item{display:flex;align-items:center;gap:4px;}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+/* ── ANALYSIS ── */
+.section-title{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:14px;}
+.card h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:1px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.card p,.card li{font-size:.87rem;line-height:1.65;color:#b0d0a0;}
+.card ul{padding-left:18px;}
+.card ul li{margin-bottom:5px;}
+.badge{font-size:.62rem;padding:2px 6px;border-radius:3px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+.badge-threat{background:rgba(198,40,40,.3);color:#ef9a9a;border:1px solid #c62828;}
+.badge-tip{background:rgba(139,195,74,.2);color:#c5e1a5;border:1px solid #558b2f;}
+.badge-key{background:rgba(212,168,69,.2);color:var(--gold);border:1px solid #7d6000;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:600px){.two-col{grid-template-columns:1fr;}}
+em{color:var(--gold);font-style:normal;font-weight:600;}
+strong{color:var(--hi);}
+.note-box{background:rgba(212,168,69,.07);border:1px solid rgba(212,168,69,.3);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:10px 14px;margin:10px 0;font-size:.84rem;color:#d0b870;line-height:1.6;}
+.danger-box{background:rgba(198,40,40,.07);border:1px solid rgba(198,40,40,.3);border-left:3px solid var(--red);border-radius:0 6px 6px 0;padding:10px 14px;margin:10px 0;font-size:.84rem;color:#ef9a9a;line-height:1.6;}
+.analysis-loading{display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 20px;color:var(--muted);}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.analysis-content{font-size:.87rem;line-height:1.7;color:#b0d0a0;}
+.analysis-content h3{font-family:'Barlow Condensed',sans-serif;color:var(--gold);font-size:1rem;margin:16px 0 6px;letter-spacing:.5px;}
+.analysis-content h4{font-family:'Barlow Condensed',sans-serif;color:var(--hi);font-size:.88rem;margin:12px 0 4px;letter-spacing:.5px;}
+.analysis-content ul{padding-left:18px;margin:6px 0 12px;}
+.analysis-content li{margin-bottom:5px;}
+.analysis-content strong{color:var(--hi);}
+.analysis-content em{color:var(--gold);font-style:normal;}
+.analysis-content .warning{color:#ef9a9a;}
+
+/* ── ROSTER TABLE ── */
+.roster-table{width:100%;border-collapse:collapse;font-size:.8rem;}
+.roster-table th{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-align:left;padding:5px 7px;border-bottom:1px solid var(--border);}
+.roster-table td{padding:6px 7px;border-bottom:1px solid rgba(37,48,32,.5);vertical-align:top;color:#b0d0a0;line-height:1.4;}
+.roster-table tr:hover td{background:rgba(255,255,255,.02);}
+.player-name{font-weight:600;color:var(--text);}
+.player-pos{font-size:.72rem;color:var(--muted);}
+.skill-pill{display:inline-block;font-size:.62rem;padding:1px 5px;border-radius:3px;margin:1px 1px 0 0;font-weight:700;}
+.pill-base{background:rgba(100,100,100,.2);color:#999;border:1px solid #444;}
+.pill-acq{background:rgba(139,195,74,.25);color:#aed581;border:1px solid #558b2f;}
+.pill-danger{background:rgba(198,40,40,.25);color:#ef9a9a;border:1px solid #7f0000;}
+.stat-chip{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;padding:1px 4px;border-radius:2px;background:rgba(255,255,255,.07);color:var(--text);}
+
+/* ── PRINT ── */
+#print-overlay{display:none;position:fixed;inset:0;background:#fff;z-index:9999;padding:20px;overflow:auto;}
+@media print{body>*:not(#print-overlay){display:none!important;}#print-overlay{display:block!important;position:static!important;}}
+
+/* ── MOBILE ── */
+@media(max-width:700px){
+  /* Setup screen */
+  #setup-screen{padding:16px 12px;gap:14px;}
+  #setup-screen h1{font-size:1.1rem;letter-spacing:1px;}
+  #setup-screen .subtitle{font-size:.7rem;letter-spacing:1.5px;}
+  .team-card{padding:14px;}
+  .upload-btn{padding:16px 12px;font-size:.85rem;min-height:52px;}
+  .persp-btn{padding:12px 16px;font-size:.82rem;min-height:44px;}
+  .analyse-btn{padding:16px 30px;font-size:.95rem;width:100%;max-width:340px;}
+
+  /* Header */
+  header{padding:12px 12px 8px;}
+  header h1{font-size:.95rem;}
+  .matchup-bar{font-size:.8rem;gap:8px;}
+
+  /* Tabs — larger tap targets */
+  .tabs{gap:2px;padding:8px 8px 0;}
+  .tab{padding:10px 12px;font-size:.72rem;min-height:42px;}
+
+  /* Pitch controls — scrollable row */
+  .pitch-controls{
+    display:flex;flex-wrap:nowrap;overflow-x:auto;
+    justify-content:flex-start;
+    padding-bottom:4px;gap:5px;width:100%;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .pitch-controls::-webkit-scrollbar{display:none;}
+  .ctrl-btn{
+    white-space:nowrap;flex-shrink:0;
+    padding:10px 14px;font-size:.75rem;
+    min-height:40px;
+  }
+
+  /* Pitch canvas — full width, allow horizontal scroll if needed */
+  .pitch-container{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  #pitch-canvas{min-width:360px;border-radius:4px;}
+
+  /* Pos display */
+  #pos-display{font-size:.72rem;padding:0 8px;}
+
+  /* Legend — tighter */
+  .pitch-legend{gap:6px;font-size:.68rem;}
+  .legend-dot{width:8px;height:8px;}
+
+  /* Analysis */
+  .page{padding:14px 10px;}
+  .analysis-content{font-size:.84rem;}
+  .analysis-content h3{font-size:.92rem;}
+
+  /* Roster table — hide stats col on very small screens */
+  .roster-table{font-size:.75rem;}
+  .roster-table td,.roster-table th{padding:5px 4px;}
+  .stat-chip{font-size:.62rem;padding:1px 3px;}
+}
+
+@media(max-width:400px){
+  .tab{padding:9px 8px;font-size:.68rem;letter-spacing:.5px;}
+  header h1{font-size:.85rem;}
+  .matchup-bar{font-size:.75rem;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ SETUP SCREEN ═══════════ -->
+<div id="setup-screen">
+  <h1>Blood Bowl Match Analyser</h1>
+  <div class="subtitle">BB2025 Season 3 · NAF Principles · Andy Davo Formations</div>
+
+  <div class="setup-grid">
+    <div class="team-card" id="card-a">
+      <h3>⚔ Your Team (Team A)</h3>
+      <label class="upload-btn">
+        <span id="upload-a-label">📄 Upload TourPlay PDF</span>
+        <input type="file" id="pdf-a" accept=".pdf,application/pdf" onchange="loadPDF('a',this)">
+      </label>
+      <div class="team-summary" id="summary-a" style="display:none;"></div>
+    </div>
+    <div class="team-card" id="card-b">
+      <h3>🛡 Opponent (Team B)</h3>
+      <label class="upload-btn">
+        <span id="upload-b-label">📄 Upload TourPlay PDF</span>
+        <input type="file" id="pdf-b" accept=".pdf,application/pdf" onchange="loadPDF('b',this)">
+      </label>
+      <div class="team-summary" id="summary-b" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="perspective-row">
+    <label>View analysis as:</label>
+    <button class="persp-btn active" id="persp-a" onclick="setPerspective('a')">Team A (Your team)</button>
+    <button class="persp-btn" id="persp-b" onclick="setPerspective('b')">Team B (Opponent)</button>
+  </div>
+
+  <div class="loading-msg" id="setup-loading"></div>
+  <button class="analyse-btn" id="analyse-btn" disabled onclick="startAnalysis()">⚔ Analyse Match</button>
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;color:var(--muted);text-align:center;max-width:500px;">
+    Upload both TourPlay PDFs to generate matchup-specific tactical analysis from your perspective. Analysis uses the Claude AI and BB2025 community principles.
+  </div>
+</div>
+
+<!-- ═══════════ APP SCREEN ═══════════ -->
+<div id="app-screen">
+  <header>
+    <h1 id="match-title">Blood Bowl Match Analyser</h1>
+    <div class="matchup-bar">
+      <div class="team-badge" id="badge-a"><div class="team-dot" id="dot-a"></div><span id="name-a">Team A</span></div>
+      <div class="vs">VS</div>
+      <div class="team-badge" id="badge-b"><div class="team-dot" id="dot-b"></div><span id="name-b">Team B</span></div>
+    </div>
+    <div style="text-align:center;margin-top:8px;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;color:var(--muted);letter-spacing:1px;" id="perspective-label"></div>
+      <button class="new-match-btn" onclick="newMatch()">← New Match</button>
+    </div>
+  </header>
+
+  <div class="tabs" id="main-tabs">
+    <button class="tab active" onclick="showTab('pitch')">⚔ Pitch</button>
+    <button class="tab" onclick="showTab('analysis')" id="tab-analysis-btn">🧠 Analysis</button>
+    <button class="tab" onclick="showTab('rosters')">📋 Rosters</button>
+  </div>
+
+  <!-- PITCH TAB -->
+  <div class="page active" id="tab-pitch">
+    <div class="pitch-wrapper">
+      <div class="pitch-controls" id="pitch-controls">
+        <!-- populated dynamically -->
+      </div>
+      <div id="pos-display"></div>
+      <div class="pitch-container">
+        <canvas id="pitch-canvas" style="touch-action:none;"></canvas>
+      </div>
+      <div class="pitch-legend" id="pitch-legend"></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;color:var(--muted);text-align:center;">
+        Drag players to move · Click to select · Snaps to grid · 🖨 Print saves formation
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYSIS TAB -->
+  <div class="page" id="tab-analysis">
+    <div id="analysis-container">
+      <div class="analysis-loading" id="analysis-loading">
+        <div class="spinner"></div>
+        <div id="analysis-loading-msg" style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;">Generating tactical analysis…</div>
+      </div>
+      <div id="analysis-output" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ROSTERS TAB -->
+  <div class="page" id="tab-rosters">
+    <div class="two-col" id="rosters-container"></div>
+  </div>
+</div>
+
+<div id="print-overlay"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// PROXY CONFIG — must be at top so all functions can reference it
+// ═══════════════════════════════════════════════════════════════
+const WORKER_URL = 'https://bloodbowl-pitch-tactics.chapman-thor.workers.dev';
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let teams = { a: null, b: null };
+let perspective = 'a';
+let analysisText = '';
+let analysisLoading = false;
+
+// ═══════════════════════════════════════════════════════════════
+// RACE CONFIG — colours, archetypes, formation types for all 31 BB2025 races
+// ═══════════════════════════════════════════════════════════════
+const RACE_CONFIG = {
+  // race name (lowercase) → { color, textColor, type, shortName }
+  // Types: bash | agility | hybrid | stunty | special
+  'orc':                {color:'#2e7d32',text:'#c8f0c0',type:'bash',    short:'ORC'},
+  'black orc':          {color:'#1b4020',text:'#a5d6a7',type:'bash',    short:'BLKORC'},
+  'chaos chosen':       {color:'#4a148c',text:'#e1bee7',type:'bash',    short:'CHAOS'},
+  'chaos dwarf':        {color:'#37474f',text:'#eceff1',type:'bash',    short:'CHDWF'},
+  'dwarf':              {color:'#4e342e',text:'#efebe9',type:'bash',    short:'DWARF'},
+  'nurgle':             {color:'#33691e',text:'#f0f4c3',type:'bash',    short:'NURG'},
+  'khorne':             {color:'#b71c1c',text:'#ffcdd2',type:'bash',    short:'KHORN'},
+  'amazon':             {color:'#00695c',text:'#b2dfdb',type:'hybrid',  short:'AMZN'},
+  'bretonnian':         {color:'#1565c0',text:'#bbdefb',type:'hybrid',  short:'BRET'},
+  'human':              {color:'#e65100',text:'#ffe0b2',type:'hybrid',  short:'HUM'},
+  'imperial nobility':  {color:'#bf360c',text:'#fbe9e7',type:'hybrid',  short:'IMP'},
+  'norse':              {color:'#0277bd',text:'#b3e5fc',type:'hybrid',  short:'NORSE'},
+  'lizardmen':          {color:'#00838f',text:'#b2ebf2',type:'hybrid',  short:'LIZ'},
+  'necromantic horror': {color:'#4a0e8f',text:'#e8d5ff',type:'hybrid',  short:'NECRO'},
+  'undead':             {color:'#6a1b9a',text:'#e1bee7',type:'hybrid',  short:'UNDEAD'},
+  'dark elf':           {color:'#880e4f',text:'#fce4ec',type:'agility', short:'DELF'},
+  'wood elf':           {color:'#558b2f',text:'#f1f8e9',type:'agility', short:'WELF'},
+  'high elf':           {color:'#c2185b',text:'#fce4ec',type:'agility', short:'HELF'},
+  'elven union':        {color:'#ad1457',text:'#fce4ec',type:'agility', short:'ELF'},
+  'skaven':             {color:'#6d4c41',text:'#efebe9',type:'agility', short:'SKAV'},
+  'snotling':           {color:'#f57f17',text:'#fff9c4',type:'stunty',  short:'SNOT'},
+  'goblin':             {color:'#558b2f',text:'#f9fbe7',type:'stunty',  short:'GOB'},
+  'halfling':           {color:'#8d6e63',text:'#efebe9',type:'stunty',  short:'HALF'},
+  'gnome':              {color:'#00897b',text:'#e0f2f1',type:'stunty',  short:'GNOME'},
+  'ogre':               {color:'#4e342e',text:'#d7ccc8',type:'stunty',  short:'OGRE'},
+  'vampire':            {color:'#6a1b9a',text:'#ede7f6',type:'special', short:'VAMP'},
+  'underworld':         {color:'#37474f',text:'#cfd8dc',type:'special', short:'UW'},
+  'slann':              {color:'#00695c',text:'#e0f2f1',type:'special', short:'SLANN'},
+  'tomb kings':         {color:'#f9a825',text:'#fff8e1',type:'special', short:'TOMK'},
+  'old world alliance': {color:'#5d4037',text:'#efebe9',type:'special', short:'OWA'},
+  'chaos renegades':    {color:'#4a148c',text:'#ede7f6',type:'special', short:'CREG'},
+};
+
+function getRaceConfig(race) {
+  if (!race) return {color:'#546e7a',text:'#eceff1',type:'hybrid',short:'???'};
+  const key = race.toLowerCase().replace(/\s+/g,' ').trim();
+  return RACE_CONFIG[key] || {color:'#546e7a',text:'#eceff1',type:'hybrid',short:key.substring(0,6).toUpperCase()};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PITCH ENGINE — Andy Davo labelling + sideline bench
+// Mobile-aware: bench moves below pitch on narrow screens.
+// ═══════════════════════════════════════════════════════════════
+const COLS=15, HALF_ROWS=13, MAX_ON_PITCH=11;
+const COL_LABELS=['L4','L3','L2','L1','1','2','3','4','5','6','7','R1','R2','R3','R4'];
+
+let halfOffset = 13; // 13=Team A half (rows 14-26), 0=Team B half (rows 1-13)
+
+// Layout computed dynamically so mobile gets a sensible size
+function getLayout(){
+  const isMobile = window.innerWidth <= 700;
+  const SZ   = isMobile ? 24 : 36;   // cell size
+  const MW   = isMobile ? 20 : 28;   // left/right margin (row numbers)
+  const MH   = isMobile ? 18 : 26;   // top/bottom margin (col labels)
+  const PITCH_W = MW*2 + COLS*SZ;
+  const PITCH_H = MH*2 + ROWS*SZ;
+
+  // Mobile: bench BELOW pitch (2 rows × 8 cols)
+  // Desktop: bench RIGHT of pitch (tall strip)
+  const BENCH_COLS_N = isMobile ? 8 : 2;
+  const BENCH_ROWS_N = isMobile ? 2 : 8;
+  const BENCH_GAP    = isMobile ? 6 : 10;
+  const BENCH_W      = isMobile ? PITCH_W : BENCH_COLS_N*SZ + MW;
+  const BENCH_H      = isMobile ? BENCH_ROWS_N*SZ + MH : PITCH_H;
+  const BENCH_X      = isMobile ? 0          : PITCH_W + BENCH_GAP;
+  const BENCH_Y      = isMobile ? PITCH_H + BENCH_GAP : 0;
+  const CW           = isMobile ? PITCH_W    : PITCH_W + BENCH_GAP + BENCH_W;
+  const CH           = isMobile ? PITCH_H + BENCH_GAP + BENCH_H : PITCH_H;
+
+  return {SZ,MW,MH,PITCH_W,PITCH_H,BENCH_COLS_N,BENCH_ROWS_N,
+          BENCH_GAP,BENCH_W,BENCH_H,BENCH_X,BENCH_Y,CW,CH,isMobile};
+}
+
+let L = getLayout(); // current layout — recalculated on resize
+
+let pitchCanvas, pitchCtx;
+let pitchPlayers=[], pitchBase=[], dragging=null, selectedId=null, currentView='';
+let pitchViews={};
+function cellX(c){return L.MW+(c-1)*L.SZ+L.SZ/2;}
+function cellY(r){return L.MH+(r-1-halfOffset)*L.SZ+L.SZ/2;}
+function snapCol(px){return Math.max(1,Math.min(COLS,Math.floor((px-L.MW)/L.SZ)+1));}
+function snapRow(py){
+  const idx=Math.floor((py-L.MH)/L.SZ); // 0-based canvas row index
+  const pitchRow=idx+halfOffset+1;
+  return Math.max(halfOffset+1, Math.min(halfOffset+HALF_ROWS, pitchRow));
+}
+function gc(col,row){return{x:cellX(col),y:cellY(row),col,row,onBench:false};}
+function colLabel(c){return COL_LABELS[c-1]||c;}
+function pitchCount(){return pitchPlayers.filter(p=>!p.onBench).length;}
+
+function benchSlotX(s){
+  if(L.isMobile){
+    return L.BENCH_X + (s % L.BENCH_COLS_N)*L.SZ + L.SZ/2;
+  }
+  return L.BENCH_X + (s % L.BENCH_COLS_N)*L.SZ + L.SZ/2;
+}
+function benchSlotY(s){
+  if(L.isMobile){
+    return L.BENCH_Y + Math.floor(s/L.BENCH_COLS_N)*L.SZ + L.SZ/2;
+  }
+  return L.MH + Math.floor(s/L.BENCH_COLS_N)*L.SZ + L.SZ/2;
+}
+function assignBenchSlots(){
+  let s=0;
+  pitchPlayers.forEach(p=>{if(p.onBench){p.x=benchSlotX(s);p.y=benchSlotY(s);p.benchSlot=s;s++;}});
+}
+
+function drawPitch(){
+  const c=pitchCtx; if(!c)return;
+  const {SZ,MW,MH,CW,CH,PITCH_W,PITCH_H,BENCH_X,BENCH_Y,BENCH_W,BENCH_H}=L;
+  const isTeamA = halfOffset===13;
+  c.clearRect(0,0,CW,CH);
+  // Grass stripes (13 rows)
+  for(let r=0;r<HALF_ROWS;r++){
+    const pr=r+halfOffset+1;
+    c.fillStyle=pr%2===0?'#357a20':'#2d5a1b';
+    c.fillRect(MW,MH+r*SZ,COLS*SZ,SZ);
+  }
+  // End zone tint
+  if(isTeamA){c.fillStyle='rgba(76,175,80,0.18)';c.fillRect(MW,MH+11*SZ,COLS*SZ,2*SZ);}
+  else{c.fillStyle='rgba(249,194,60,0.14)';c.fillRect(MW,MH,COLS*SZ,2*SZ);}
+  // Grid
+  c.strokeStyle='rgba(255,255,255,0.11)';c.lineWidth=.5;
+  for(let r=0;r<=HALF_ROWS;r++){c.beginPath();c.moveTo(MW,MH+r*SZ);c.lineTo(MW+COLS*SZ,MH+r*SZ);c.stroke();}
+  for(let col=0;col<=COLS;col++){c.beginPath();c.moveTo(MW+col*SZ,MH);c.lineTo(MW+col*SZ,MH+HALF_ROWS*SZ);c.stroke();}
+  // Wide zone dividers
+  c.strokeStyle='rgba(255,255,255,0.28)';c.lineWidth=1;c.setLineDash([5,4]);
+  [4,11].forEach(col=>{c.beginPath();c.moveTo(MW+col*SZ,MH);c.lineTo(MW+col*SZ,MH+HALF_ROWS*SZ);c.stroke();});
+  c.setLineDash([]);
+  // End zone boundary line
+  c.strokeStyle='rgba(255,255,255,0.55)';c.lineWidth=1.5;
+  const ezBoundY=isTeamA?MH+11*SZ:MH+2*SZ;
+  c.beginPath();c.moveTo(MW,ezBoundY);c.lineTo(MW+COLS*SZ,ezBoundY);c.stroke();
+  // LOS — at the open edge of the half
+  const losY=isTeamA?MH:MH+HALF_ROWS*SZ;
+  c.strokeStyle='rgba(255,220,80,0.95)';c.lineWidth=2.5;
+  c.beginPath();c.moveTo(MW,losY);c.lineTo(MW+COLS*SZ,losY);c.stroke();
+  // Pitch border
+  c.strokeStyle='rgba(255,255,255,0.6)';c.lineWidth=2;
+  c.strokeRect(MW,MH,COLS*SZ,HALF_ROWS*SZ);
+  // Labels
+  c.textAlign='center';c.textBaseline='middle';
+  c.fillStyle='rgba(255,255,255,0.2)';
+  c.font=`bold ${SZ*.27}px "Barlow Condensed",sans-serif`;
+  c.fillText('CENTRE',MW+7*SZ+SZ/2,MH*.38);
+  c.font=`bold ${SZ*.28}px "Barlow Condensed",sans-serif`;
+  COL_LABELS.forEach((lbl,i)=>{
+    c.fillStyle=(i<4||i>10)?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.48)';
+    c.fillText(lbl,MW+i*SZ+SZ/2,MH*.55);
+    c.fillText(lbl,MW+i*SZ+SZ/2,MH+HALF_ROWS*SZ+MH*.55);
+  });
+  // Row numbers — show actual pitch row numbers
+  c.font=`${SZ*.26}px "Barlow Condensed",sans-serif`;
+  c.fillStyle='rgba(255,255,255,0.35)';
+  for(let r=0;r<HALF_ROWS;r++){
+    const pr=r+halfOffset+1, ry=MH+r*SZ+SZ/2;
+    c.fillText(pr,MW*.45,ry); c.fillText(pr,MW+COLS*SZ+MW*.55,ry);
+  }
+  // Team end zone label
+  c.font=`bold ${SZ*.26}px "Barlow Condensed",sans-serif`;
+  const tn=isTeamA?(teams.a?teams.a.name.toUpperCase():'YOUR TEAM'):(teams.b?teams.b.name.toUpperCase():'OPPONENT');
+  c.fillStyle=isTeamA?'rgba(76,175,80,0.7)':'rgba(249,194,60,0.6)';
+  c.fillText(`${tn} END ZONE`,MW+COLS*SZ/2,isTeamA?MH+12*SZ:MH+SZ);
+  // LOS label
+  c.fillStyle='rgba(255,220,80,0.9)';
+  c.font=`bold ${SZ*.28}px "Barlow Condensed",sans-serif`;
+  const losLY=isTeamA?losY+MH*.5:losY-MH*.5;
+  c.fillText('LOS',MW*.45,losLY); c.fillText('LOS',MW+COLS*SZ+MW*.55,losLY);
+  // Wide labels
+  c.fillStyle='rgba(255,255,255,0.2)';
+  c.font=`bold ${SZ*.22}px "Barlow Condensed",sans-serif`;
+  c.fillText('WIDE',MW+2*SZ,MH+SZ*.5); c.fillText('WIDE',MW+13*SZ,MH+SZ*.5);
+  // Bench
+  c.fillStyle='rgba(0,0,0,0.55)'; c.fillRect(BENCH_X,BENCH_Y,BENCH_W,BENCH_H);
+  c.strokeStyle='rgba(255,255,255,0.2)';c.lineWidth=1;
+  c.strokeRect(BENCH_X,BENCH_Y,BENCH_W,BENCH_H);
+  c.font=`bold ${SZ*.28}px "Barlow Condensed",sans-serif`;
+  c.fillStyle='rgba(255,255,255,0.5)';c.textAlign='center';
+  c.fillText('BENCH',BENCH_X+BENCH_W/2,BENCH_Y>0?BENCH_Y-MH*.45:MH*.45);
+  for(let s=0;s<16;s++){
+    const bx=benchSlotX(s),by=benchSlotY(s);
+    if(by<BENCH_Y+BENCH_H-SZ/2){
+      c.strokeStyle='rgba(255,255,255,0.1)';c.lineWidth=1;c.setLineDash([2,2]);
+      c.beginPath();c.arc(bx,by,SZ*.38,0,Math.PI*2);c.stroke();
+      c.setLineDash([]);
+    }
+  }
+  const onP=pitchCount();
+  c.font=`bold ${SZ*.3}px "Barlow Condensed",sans-serif`;
+  c.fillStyle=onP===MAX_ON_PITCH?'#8bc34a':onP>MAX_ON_PITCH?'#ef9a9a':'#f9c23c';
+  c.fillText(`${onP}/11`,BENCH_X+BENCH_W/2,BENCH_Y+BENCH_H+MH*.55);
+  if(dragging&&dragging.dragX&&dragging.dragX>L.PITCH_W){
+    c.fillStyle='rgba(212,168,69,0.12)'; c.fillRect(BENCH_X,BENCH_Y,BENCH_W,BENCH_H);
+  }
+  if(onP>MAX_ON_PITCH){
+    c.font=`bold ${SZ*.27}px "Barlow Condensed",sans-serif`;
+    c.fillStyle='rgba(239,154,154,0.9)';c.textAlign='center';
+    c.fillText(`\u26A0 ${onP-MAX_ON_PITCH} too many \u2014 drag to bench`,MW+COLS*SZ/2,MH+HALF_ROWS*SZ-SZ*.4);
+  }
+  // Players
+  const R=SZ*.42;
+  [...pitchPlayers].sort((a,b)=>(a.onBench?0:1)-(b.onBench?0:1)).forEach(p=>{
+    const isSel=p.id===selectedId;
+    c.globalAlpha=p.onBench?0.72:1;
+    c.fillStyle='rgba(0,0,0,0.4)';
+    c.beginPath();c.arc(p.x+2,p.y+2,R,0,Math.PI*2);c.fill();
+    if(isSel){c.shadowColor='#fff';c.shadowBlur=10;}
+    c.fillStyle=p.color;
+    c.beginPath();c.arc(p.x,p.y,R,0,Math.PI*2);c.fill();
+    c.strokeStyle=p.onBench?'rgba(255,255,255,0.2)':(p.ringColor||(isSel?'#fff':'rgba(255,255,255,0.5)'));
+    c.lineWidth=isSel?2.5:(p.ringW||1.2);
+    c.beginPath();c.arc(p.x,p.y,R,0,Math.PI*2);c.stroke();
+    c.shadowBlur=0;
+    if(p.ringW&&!p.onBench){
+      c.strokeStyle=p.ringColor;c.lineWidth=1.5;c.setLineDash([3,2]);
+      c.beginPath();c.arc(p.x,p.y,R+3,0,Math.PI*2);c.stroke();c.setLineDash([]);
+    }
+    const fs=p.label.length>3?SZ*.21:SZ*.26;
+    c.font=`bold ${fs}px "Barlow Condensed",sans-serif`;
+    c.fillStyle=p.onBench?'rgba(0,0,0,0.6)':'rgba(0,0,0,0.88)';
+    c.textAlign='center';c.textBaseline='middle';
+    c.fillText(p.label,p.x,p.y+1);
+    c.globalAlpha=1;
+  });
+}
+
+function initPitchCanvas(){
+  pitchCanvas=document.getElementById('pitch-canvas');
+  pitchCtx=pitchCanvas.getContext('2d');
+  resizePitch();
+  pitchCanvas.addEventListener('mousedown',startDrag);
+  pitchCanvas.addEventListener('touchstart',startDrag,{passive:false});
+  window.addEventListener('mousemove',doDrag);
+  window.addEventListener('touchmove',doDrag,{passive:false});
+  window.addEventListener('mouseup',endDrag);
+  window.addEventListener('touchend',endDrag);
+  window.addEventListener('resize',()=>{
+    L=getLayout();
+    resizePitch();
+    pitchPlayers.forEach(p=>{
+      if(!p.onBench){p.x=cellX(p.col);p.y=cellY(p.row);}
+    });
+    assignBenchSlots();
+    drawPitch();
+  });
+}
+function resizePitch(){
+  L=getLayout();
+  pitchCanvas.width=L.CW;
+  pitchCanvas.height=L.CH;
+}
+
+function getScale(){return pitchCanvas.getBoundingClientRect().width/L.CW;}
+function canvasCoords(e){
+  const r=pitchCanvas.getBoundingClientRect(),sc=getScale();
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  return{x:(cx-r.left)/sc,y:(cy-r.top)/sc};
+}
+function hitTest(x,y){
+  const R=SZ*.42+4;
+  // Test bench players if near bench zone
+  for(let i=pitchPlayers.length-1;i>=0;i--){
+    const p=pitchPlayers[i];
+    if((x-p.x)**2+(y-p.y)**2<R**2) return p;
+  }
+  return null;
+}
+function startDrag(e){
+  e.preventDefault();
+  const {x,y}=canvasCoords(e);
+  const p=hitTest(x,y);
+  if(p){
+    selectedId=p.id;
+    dragging={player:p,offX:x-p.x,offY:y-p.y,startedOnBench:p.onBench,dragX:x};
+    showPosLabel(p);
+    drawPitch();
+  }
+}
+function doDrag(e){
+  if(!dragging)return;
+  e.preventDefault();
+  const {x,y}=canvasCoords(e);
+  dragging.player.x=x-dragging.offX;
+  dragging.player.y=y-dragging.offY;
+  dragging.dragX=x;
+  drawPitch();
+}
+function endDrag(){
+  if(!dragging)return;
+  const p=dragging.player;
+  const dropX=p.x;
+
+  if(dropX>L.PITCH_W-L.MW/2){
+    // Dropped onto bench
+    p.onBench=true;
+    assignBenchSlots();
+    showPosLabel(p);
+  } else {
+    // Dropped onto pitch
+    if(p.onBench){
+      // Coming from bench — check limit
+      if(pitchCount()>=MAX_ON_PITCH){
+        // Reject — bounce back to bench
+        p.onBench=true;
+        assignBenchSlots();
+        document.getElementById('pos-display').textContent=
+          '\u26A0 11 players already on pitch \u2014 drag one off first';
+        dragging=null;
+        drawPitch();
+        return;
+      }
+      p.onBench=false;
+    }
+    p.col=snapCol(dropX);p.row=snapRow(p.y);
+    p.x=cellX(p.col);p.y=cellY(p.row);
+    showPosLabel(p);
+  }
+  dragging=null;
+  drawPitch();
+}
+function showPosLabel(p){
+  if(!p){document.getElementById('pos-display').textContent='';return;}
+  const loc=p.onBench?'BENCH':`Row ${p.row}, Col ${colLabel(p.col)}`;
+  document.getElementById('pos-display').textContent=`${p.name} (${p.label}) \u2014 ${loc}`;
+}
+function loadPitchView(viewName){
+  const src=pitchViews[viewName];
+  if(!src)return;
+  // Set halfOffset: Team A views show rows 14-26 (offset=13)
+  //                 Team B views show rows 1-13  (offset=0)
+  halfOffset = viewName.startsWith('a') ? 13 : 0;
+  // Recalculate cell positions with new offset
+  let cnt=0;
+  pitchPlayers=src.map(p=>{
+    const col=p.col||snapCol(p.x), row=p.row||13; // preserve row from formation data
+    const onBench=cnt>=MAX_ON_PITCH;
+    if(!onBench)cnt++;
+    return Object.assign({},p,{x:cellX(col),y:cellY(row),col,row,onBench});
+  });
+  assignBenchSlots();
+  pitchBase=JSON.parse(JSON.stringify(pitchPlayers));
+  selectedId=null;dragging=null;
+  drawPitch();showPosLabel(null);
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════
+// FORMATION LIBRARY — 31 races
+// Returns array of player tokens for a given race + role (offense/defense)
+// Attacking direction: team A attacks UP (toward row 1)
+//                      team B attacks DOWN (toward row 26)
+// ═══════════════════════════════════════════════════════════════
+function getFormations(teamA, teamB) {
+  const views = {};
+  // Build formations for each view needed
+  views['a-offense'] = buildOffense(teamA, 'a');  // A receives, attacks up
+  views['a-defense'] = buildDefense(teamA, 'a');  // A kicks, defends south half
+  views['b-offense'] = buildOffense(teamB, 'b');  // B receives, attacks down
+  views['b-defense'] = buildDefense(teamB, 'b');  // B kicks, defends north half
+  return views;
+}
+
+function raceType(team){
+  if(!team) return 'hybrid';
+  return getRaceConfig(team.race).type;
+}
+
+// Resolve player colors from race and position keyword
+function playerColor(race, posKeyword) {
+  const cfg = getRaceConfig(race);
+  const pos = (posKeyword||'').toLowerCase();
+  // Big guys / trolls / ogres
+  if(pos.includes('troll')||pos.includes('ogre')||pos.includes('treeman')||pos.includes('giant')||pos.includes('minotaur')||pos.includes('kroxigor')||pos.includes('rat ogre')||pos.includes('mummy')) return '#5d4037';
+  // Ball handlers / throwers
+  if(pos.includes('thrower')||pos.includes('passer')) return '#aed581';
+  // Blitzers
+  if(pos.includes('blitzer')||pos.includes('runner')&&!pos.includes('stilty')) return '#66bb6a';
+  // Big uns / blockers
+  if(pos.includes('big un')||pos.includes('blocker')||pos.includes('black orc')) return '#388e3c';
+  // Goblins / halflings / snotlings (small)
+  if(pos.includes('goblin')||pos.includes('halfling')||pos.includes('snotling')||pos.includes('gnome')) return '#9ccc65';
+  // Catchers / receivers
+  if(pos.includes('catcher')||pos.includes('receiver')) return '#80cbc4';
+  // Linemen
+  if(pos.includes('lineman')||pos.includes('linewoman')||pos.includes('line')) return cfg.color;
+  return cfg.color;
+}
+
+// Generic cage formation for bash/hybrid teams
+// ALWAYS built as Team A (attacking upward, LOS at row 14, own half rows 14-24).
+// Team B formations are then flipped: row → (27 - row).
+// This ensures consistent half-of-pitch placement for both teams.
+function buildOffense(team, side) {
+  const isA = side === 'a';
+  // All rows defined for Team A (attacking UP toward row 1)
+  // LOS = row 14, own half = rows 14-24, own EZ = rows 25-26
+  const LOS  = 14;  // mandatory LOS placement row
+  const R1   = 15;  // one row behind LOS (cage front / blitzers)
+  const R2   = 16;  // two rows behind LOS (cage sides / big uns)
+  const R3   = 17;  // three rows back (troll / guard)
+  const R4   = 18;  // four rows back (ball carrier mid-depth)
+  const R5   = 20;  // deep (goblins / wide reserves)
+
+  const players = [];
+  const type = raceType(team);
+  const race = team ? team.race : 'human';
+  const cfg = getRaceConfig(race);
+  const pid = (n) => `${side}-off-${n}`;
+
+  if (type === 'bash') {
+    players.push(Object.assign(gc(6,LOS), {id:pid(1), label:'L',  name:'Lineman',    pos:'LOS fodder — mandatory body',           color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'L',  name:'Lineman',    pos:'LOS centre',                            color:cfg.color}));
+    players.push(Object.assign(gc(10,LOS),{id:pid(3), label:'L',  name:'Lineman',    pos:'LOS right',                             color:cfg.color}));
+    players.push(Object.assign(gc(5,R1),  {id:pid(4), label:'BL', name:'Blocker',    pos:'Path clearer left — bashes forward',    color:'#388e3c'}));
+    players.push(Object.assign(gc(11,R1), {id:pid(5), label:'BL', name:'Blocker',    pos:'Path clearer right',                    color:'#388e3c'}));
+    players.push(Object.assign(gc(5,R2),  {id:pid(6), label:'BZ', name:'Blitzer',    pos:'Cage NW corner',                        color:'#66bb6a'}));
+    players.push(Object.assign(gc(11,R2), {id:pid(7), label:'BZ', name:'Blitzer',    pos:'Cage NE corner',                        color:'#66bb6a'}));
+    players.push(Object.assign(gc(8,R4),  {id:pid(8), label:'TH', name:'Ball Carrier',pos:'BALL CARRIER — mid-depth pickup',      color:'#aed581', ringColor:'#ffd54f', ringW:2}));
+    players.push(Object.assign(gc(8,R3),  {id:pid(9), label:'TR', name:'Troll/Guard', pos:'Rear cage anchor — Guard assist',      color:'#5d4037'}));
+    players.push(Object.assign(gc(14,R1), {id:pid(10),label:'L',  name:'Lineman',    pos:'Flexible right flank',                  color:cfg.color}));
+    players.push(Object.assign(gc(2,R5),  {id:pid(11),label:'G',  name:'Special',    pos:'Wide left — TTM reserve, stay safe',    color:'#9ccc65'}));
+    players.push(Object.assign(gc(14,R5), {id:pid(12),label:'G',  name:'Special',    pos:'Wide right — TTM reserve, stay safe',   color:'#9ccc65'}));
+  } else if (type === 'agility') {
+    players.push(Object.assign(gc(6,LOS), {id:pid(1), label:'L',  name:'Line',    pos:'LOS',                               color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'L',  name:'Line',    pos:'LOS centre',                        color:cfg.color}));
+    players.push(Object.assign(gc(10,LOS),{id:pid(3), label:'L',  name:'Line',    pos:'LOS',                               color:cfg.color}));
+    players.push(Object.assign(gc(3,R1),  {id:pid(4), label:'BZ', name:'Blitzer', pos:'Left wing — fast scoring threat',   color:'#66bb6a'}));
+    players.push(Object.assign(gc(13,R1), {id:pid(5), label:'BZ', name:'Blitzer', pos:'Right wing threat',                 color:'#66bb6a'}));
+    players.push(Object.assign(gc(5,R2),  {id:pid(6), label:'CA', name:'Catcher', pos:'Left fast lane',                    color:'#80cbc4'}));
+    players.push(Object.assign(gc(11,R2), {id:pid(7), label:'CA', name:'Catcher', pos:'Right fast lane',                   color:'#80cbc4'}));
+    players.push(Object.assign(gc(8,R3),  {id:pid(8), label:'TH', name:'Thrower', pos:'BALL CARRIER',                      color:'#aed581', ringColor:'#ffd54f', ringW:2}));
+    players.push(Object.assign(gc(6,R4),  {id:pid(9), label:'CA', name:'Catcher', pos:'Deep support left',                 color:'#80cbc4'}));
+    players.push(Object.assign(gc(10,R4), {id:pid(10),label:'CA', name:'Catcher', pos:'Deep support right',                color:'#80cbc4'}));
+    players.push(Object.assign(gc(2,R5),  {id:pid(11),label:'L',  name:'Line',    pos:'Wide left',                         color:cfg.color}));
+    players.push(Object.assign(gc(14,R5), {id:pid(12),label:'L',  name:'Line',    pos:'Wide right',                        color:cfg.color}));
+  } else if (type === 'stunty') {
+    players.push(Object.assign(gc(5,LOS), {id:pid(1), label:'S',  name:'Lineman',     pos:'LOS',                           color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'S',  name:'Lineman',     pos:'LOS centre',                    color:cfg.color}));
+    players.push(Object.assign(gc(11,LOS),{id:pid(3), label:'S',  name:'Lineman',     pos:'LOS',                           color:cfg.color}));
+    players.push(Object.assign(gc(2,LOS), {id:pid(4), label:'S',  name:'Lineman',     pos:'Wide LOS left',                 color:cfg.color}));
+    players.push(Object.assign(gc(14,LOS),{id:pid(5), label:'S',  name:'Lineman',     pos:'Wide LOS right',                color:cfg.color}));
+    players.push(Object.assign(gc(4,R1),  {id:pid(6), label:'BG', name:'Big Guy',     pos:'Big Guy left',                  color:'#5d4037'}));
+    players.push(Object.assign(gc(12,R1), {id:pid(7), label:'BG', name:'Big Guy',     pos:'Big Guy right',                 color:'#5d4037'}));
+    players.push(Object.assign(gc(8,R2),  {id:pid(8), label:'BC', name:'Ball Carrier',pos:'BALL CARRIER',                  color:'#ff7043', ringColor:'#ffd54f', ringW:2}));
+    players.push(Object.assign(gc(6,R3),  {id:pid(9), label:'S',  name:'Special',     pos:'Flanker left',                  color:'#b2ff59'}));
+    players.push(Object.assign(gc(10,R3), {id:pid(10),label:'S',  name:'Special',     pos:'Flanker right',                 color:'#b2ff59'}));
+    players.push(Object.assign(gc(2,R4),  {id:pid(11),label:'S',  name:'Swarmer',     pos:'Wide left deep',                color:cfg.color}));
+    players.push(Object.assign(gc(14,R4), {id:pid(12),label:'S',  name:'Swarmer',     pos:'Wide right deep',               color:cfg.color}));
+  } else {
+    // Hybrid / special
+    players.push(Object.assign(gc(6,LOS), {id:pid(1), label:'L',  name:'Line',    pos:'LOS',                               color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'L',  name:'Line',    pos:'LOS centre',                        color:cfg.color}));
+    players.push(Object.assign(gc(10,LOS),{id:pid(3), label:'L',  name:'Line',    pos:'LOS',                               color:cfg.color}));
+    players.push(Object.assign(gc(4,R1),  {id:pid(4), label:'BZ', name:'Blitzer', pos:'Left blitz — cage builder',         color:'#66bb6a'}));
+    players.push(Object.assign(gc(12,R1), {id:pid(5), label:'BZ', name:'Blitzer', pos:'Right blitz — cage builder',        color:'#66bb6a'}));
+    players.push(Object.assign(gc(6,R2),  {id:pid(6), label:'BL', name:'Blocker', pos:'Cage left',                         color:cfg.color}));
+    players.push(Object.assign(gc(10,R2), {id:pid(7), label:'BL', name:'Blocker', pos:'Cage right',                        color:cfg.color}));
+    players.push(Object.assign(gc(8,R3),  {id:pid(8), label:'TH', name:'Ball Carrier',pos:'BALL CARRIER',                  color:'#aed581', ringColor:'#ffd54f', ringW:2}));
+    players.push(Object.assign(gc(8,R4),  {id:pid(9), label:'SU', name:'Support', pos:'Rear support',                      color:cfg.color}));
+    players.push(Object.assign(gc(14,R1), {id:pid(10),label:'L',  name:'Line',    pos:'Right flank',                       color:cfg.color}));
+    players.push(Object.assign(gc(2,R4),  {id:pid(11),label:'L',  name:'Line',    pos:'Wide left deep',                    color:cfg.color}));
+    players.push(Object.assign(gc(14,R4), {id:pid(12),label:'L',  name:'Line',    pos:'Wide right deep',                   color:cfg.color}));
+  }
+
+  // Team B attacks DOWNWARD — mirror all rows around the pitch centre (row 13.5)
+  // Formula: flipped = 27 - row
+  // Row 14 (A's LOS row) → 13 (B's LOS row) ✓
+  // Row 15 (one behind LOS for A) → 12 (one behind LOS for B) ✓
+  // Row 20 (deep for A) → 7 (deep for B) ✓
+  if (!isA) players.forEach(p => {
+    p.row = 27 - p.row;
+    p.y = cellY(p.row);
+  });
+
+  return players;
+}
+
+function buildDefense(team, side) {
+  const isA = side === 'a';
+  // Always built as Team A (defending from rows 14+, LOS at row 14)
+  const LOS = 14;
+  const R1  = 15;
+  const R2  = 16;
+  const R3  = 19;
+  const R4  = 20;
+
+  const type = raceType(team);
+  const race = team ? team.race : 'human';
+  const cfg = getRaceConfig(race);
+  const pid = (n) => `${side}-def-${n}`;
+  const players = [];
+
+  if (type === 'bash') {
+    // Modified Chevron: linemen on LOS absorb ST5 blocks, power layer behind
+    players.push(Object.assign(gc(5,LOS), {id:pid(1), label:'L',  name:'Lineman', pos:'LOS fodder — absorbs big blocks',       color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'L',  name:'Lineman', pos:'LOS centre',                            color:cfg.color}));
+    players.push(Object.assign(gc(11,LOS),{id:pid(3), label:'L',  name:'Lineman', pos:'LOS right',                             color:cfg.color}));
+    players.push(Object.assign(gc(3,LOS), {id:pid(4), label:'L',  name:'Lineman', pos:'Wide LOS left — covers flank',          color:cfg.color}));
+    players.push(Object.assign(gc(3,R1),  {id:pid(5), label:'BZ', name:'Blitzer', pos:'Left blitzer — off sideline, wide',     color:'#66bb6a'}));
+    players.push(Object.assign(gc(6,R1),  {id:pid(6), label:'BL', name:'Blocker', pos:'Power layer left — 1 row behind LOS',   color:'#388e3c'}));
+    players.push(Object.assign(gc(8,R1),  {id:pid(7), label:'TR', name:'Guard',   pos:'Central guard anchor',                  color:'#5d4037'}));
+    players.push(Object.assign(gc(10,R1), {id:pid(8), label:'BL', name:'Blocker', pos:'Power layer right',                     color:'#388e3c'}));
+    players.push(Object.assign(gc(13,R1), {id:pid(9), label:'BZ', name:'Blitzer', pos:'Right blitzer — wide, off sideline',    color:'#66bb6a'}));
+    players.push(Object.assign(gc(2,R1),  {id:pid(10),label:'L',  name:'Lineman', pos:'Wide left flank cover',                 color:cfg.color}));
+    players.push(Object.assign(gc(2,R3),  {id:pid(11),label:'P',  name:'Thrower', pos:'Deep left safety (P)',                  color:'#aed581'}));
+    players.push(Object.assign(gc(14,R3), {id:pid(12),label:'G',  name:'Special', pos:'Deep right safety (G)',                 color:'#9ccc65'}));
+  } else if (type === 'agility') {
+    players.push(Object.assign(gc(6,LOS), {id:pid(1), label:'L',  name:'Line',    pos:'LOS',                                   color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'L',  name:'Line',    pos:'LOS centre',                            color:cfg.color}));
+    players.push(Object.assign(gc(10,LOS),{id:pid(3), label:'L',  name:'Line',    pos:'LOS',                                   color:cfg.color}));
+    players.push(Object.assign(gc(2,R1),  {id:pid(4), label:'BZ', name:'Blitzer', pos:'Wide left pressure',                    color:'#66bb6a'}));
+    players.push(Object.assign(gc(4,R1),  {id:pid(5), label:'CA', name:'Catcher', pos:'Left screen',                           color:'#80cbc4'}));
+    players.push(Object.assign(gc(8,R1),  {id:pid(6), label:'BZ', name:'Blitzer', pos:'Centre blitz',                          color:'#66bb6a'}));
+    players.push(Object.assign(gc(12,R1), {id:pid(7), label:'CA', name:'Catcher', pos:'Right screen',                          color:'#80cbc4'}));
+    players.push(Object.assign(gc(14,R1), {id:pid(8), label:'BZ', name:'Blitzer', pos:'Wide right pressure',                   color:'#66bb6a'}));
+    players.push(Object.assign(gc(5,R2),  {id:pid(9), label:'CA', name:'Catcher', pos:'Deep left safety',                      color:'#80cbc4'}));
+    players.push(Object.assign(gc(11,R2), {id:pid(10),label:'CA', name:'Catcher', pos:'Deep right safety',                     color:'#80cbc4'}));
+    players.push(Object.assign(gc(2,R3),  {id:pid(11),label:'TH', name:'Thrower', pos:'Last line safety',                      color:'#aed581'}));
+    players.push(Object.assign(gc(8,R3),  {id:pid(12),label:'L',  name:'Line',    pos:'Deep centre cover',                     color:cfg.color}));
+  } else if (type === 'stunty') {
+    players.push(Object.assign(gc(4,LOS), {id:pid(1), label:'S',  name:'Lineman', pos:'LOS 1',                                 color:cfg.color}));
+    players.push(Object.assign(gc(7,LOS), {id:pid(2), label:'S',  name:'Lineman', pos:'LOS 2',                                 color:cfg.color}));
+    players.push(Object.assign(gc(10,LOS),{id:pid(3), label:'S',  name:'Lineman', pos:'LOS 3',                                 color:cfg.color}));
+    players.push(Object.assign(gc(2,LOS), {id:pid(4), label:'S',  name:'Lineman', pos:'Wide LOS left',                         color:cfg.color}));
+    players.push(Object.assign(gc(14,LOS),{id:pid(5), label:'S',  name:'Lineman', pos:'Wide LOS right',                        color:cfg.color}));
+    players.push(Object.assign(gc(4,R1),  {id:pid(6), label:'BG', name:'Big Guy', pos:'Big Guy left',                          color:'#5d4037'}));
+    players.push(Object.assign(gc(12,R1), {id:pid(7), label:'BG', name:'Big Guy', pos:'Big Guy right',                         color:'#5d4037'}));
+    players.push(Object.assign(gc(8,R1),  {id:pid(8), label:'S',  name:'Special', pos:'Central support',                       color:'#ff7043'}));
+    players.push(Object.assign(gc(6,R1),  {id:pid(9), label:'S',  name:'Swarmer', pos:'Centre left',                           color:cfg.color}));
+    players.push(Object.assign(gc(10,R1), {id:pid(10),label:'S',  name:'Swarmer', pos:'Centre right',                          color:cfg.color}));
+    players.push(Object.assign(gc(2,R3),  {id:pid(11),label:'S',  name:'Swarmer', pos:'Deep left',                             color:cfg.color}));
+    players.push(Object.assign(gc(14,R3), {id:pid(12),label:'S',  name:'Swarmer', pos:'Deep right',                            color:cfg.color}));
+  } else {
+    // Hybrid
+    players.push(Object.assign(gc(6,LOS), {id:pid(1), label:'L',  name:'Line',    pos:'LOS',                                   color:cfg.color}));
+    players.push(Object.assign(gc(8,LOS), {id:pid(2), label:'L',  name:'Line',    pos:'LOS centre',                            color:cfg.color}));
+    players.push(Object.assign(gc(10,LOS),{id:pid(3), label:'L',  name:'Line',    pos:'LOS',                                   color:cfg.color}));
+    players.push(Object.assign(gc(3,R1),  {id:pid(4), label:'BZ', name:'Blitzer', pos:'Wide left',                             color:'#66bb6a'}));
+    players.push(Object.assign(gc(6,R1),  {id:pid(5), label:'BL', name:'Blocker', pos:'Support left',                          color:cfg.color}));
+    players.push(Object.assign(gc(8,R1),  {id:pid(6), label:'SU', name:'Support', pos:'Centre',                                color:cfg.color}));
+    players.push(Object.assign(gc(10,R1), {id:pid(7), label:'BL', name:'Blocker', pos:'Support right',                         color:cfg.color}));
+    players.push(Object.assign(gc(13,R1), {id:pid(8), label:'BZ', name:'Blitzer', pos:'Wide right',                            color:'#66bb6a'}));
+    players.push(Object.assign(gc(2,LOS), {id:pid(9), label:'L',  name:'Line',    pos:'Wide LOS left',                         color:cfg.color}));
+    players.push(Object.assign(gc(14,LOS),{id:pid(10),label:'L',  name:'Line',    pos:'Wide LOS right',                        color:cfg.color}));
+    players.push(Object.assign(gc(2,R3),  {id:pid(11),label:'TH', name:'Thrower', pos:'Deep left safety',                      color:'#aed581'}));
+    players.push(Object.assign(gc(14,R3), {id:pid(12),label:'L',  name:'Line',    pos:'Deep right',                            color:cfg.color}));
+  }
+
+  // Team B defends from the TOP of the pitch (rows 1-13), flip all rows
+  if (!isA) players.forEach(p => {
+    p.row = 27 - p.row;
+    p.y = cellY(p.row);
+  });
+
+  return players;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF PARSING via Claude API
+// ═══════════════════════════════════════════════════════════════
+async function loadPDF(side, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const loadingEl = document.getElementById('setup-loading');
+  loadingEl.textContent = `Reading ${side === 'a' ? 'Team A' : 'Team B'} PDF…`;
+
+  try {
+    const base64 = await fileToBase64(file);
+    loadingEl.textContent = `Parsing ${side === 'a' ? 'Team A' : 'Team B'} roster with AI…`;
+
+    const response = await fetch(apiUrl(), {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2500,
+        system: 'You are a data extractor. Return ONLY raw JSON with no markdown, no backticks, no code fences, no explanation. Just the JSON object.',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+            },
+            {
+              type: 'text',
+              text: `Extract the Blood Bowl team data from this PDF. Return ONLY a JSON object — no markdown, no backticks, no explanation, nothing before or after the JSON.
+
+Required structure:
+{"name":"team name","race":"race name","ctv":1150,"coach":"coach name","rerolls":3,"players":[{"number":1,"name":"player name","position":"position type","ma":6,"st":3,"ag":"3+","pa":"4+","av":"10+","skills":["Block","Break Tackle"],"acquired_skills":["Mighty Blow"],"spp":3,"experience":"Rookie"}]}
+
+Rules:
+- skills = ALL skills the player has (both innate and acquired)
+- acquired_skills = ONLY skills gained through levelling up (shown highlighted or specially marked)
+- If a player has no name shown, use their position as the name
+- Return ONLY the JSON, nothing else`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+
+    // Check for API-level errors
+    if (data.error) {
+      throw new Error(`API error: ${data.error.message}`);
+    }
+
+    const rawText = data.content?.find(c => c.type === 'text')?.text || '';
+
+    // Robust JSON extraction — try multiple strategies
+    const team = extractJSON(rawText);
+
+    if (!team || !team.players || team.players.length === 0) {
+      throw new Error('Could not find player data in response. Raw response logged to console.');
+    }
+
+    teams[side] = team;
+    updateTeamCard(side, team);
+    checkReadyToAnalyse();
+    loadingEl.textContent = `✓ ${team.name} loaded (${team.players.length} players)`;
+    setTimeout(() => { loadingEl.textContent = ''; }, 3000);
+
+  } catch(err) {
+    console.error('PDF parse error:', err);
+    loadingEl.textContent = `❌ Error: ${err.message}. Please try again.`;
+  }
+}
+
+function extractJSON(text) {
+  if (!text || text.trim() === '') throw new Error('Empty response from API');
+
+  // Strategy 1: direct parse if already clean JSON
+  try { return JSON.parse(text.trim()); } catch(e) {}
+
+  // Strategy 2: strip markdown fences (all variants)
+  try {
+    const stripped = text
+      .replace(/^```[\w]*\s*/,'')   // opening fence
+      .replace(/\s*```\s*$/,'')     // closing fence
+      .trim();
+    return JSON.parse(stripped);
+  } catch(e) {}
+
+  // Strategy 3: extract first {...} block
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+  } catch(e) {}
+
+  // Strategy 4: find JSON starting at first { and ending at last }
+  try {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(text.substring(start, end + 1));
+    }
+  } catch(e) {}
+
+  // All strategies failed
+  console.error('Raw API response:', text);
+  throw new Error('JSON parsing failed after all extraction attempts. Check console for raw response.');
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+}
+
+function updateTeamCard(side, team) {
+  const cfg = getRaceConfig(team.race);
+  const card = document.getElementById(`card-${side}`);
+  card.classList.add('loaded');
+  document.getElementById(`upload-${side}-label`).textContent = '✓ ' + team.name;
+
+  const summary = document.getElementById(`summary-${side}`);
+  summary.style.display = 'block';
+  summary.innerHTML = `
+    <strong>${team.name}</strong>
+    <span class="race-badge" style="background:${cfg.color};color:${cfg.text};">${team.race.toUpperCase()}</span>
+    <div style="margin-top:6px;color:var(--muted);">
+      CTV: ${team.ctv?.toLocaleString() || '?'} · ${team.players?.length || 0} players · ${team.rerolls || 0} re-rolls
+    </div>
+  `;
+
+  // Update perspective buttons
+  document.getElementById('persp-a').textContent = side === 'a' ? `Team A: ${team.name}` : document.getElementById('persp-a').textContent;
+  document.getElementById('persp-b').textContent = side === 'b' ? `Team B: ${team.name}` : document.getElementById('persp-b').textContent;
+  if(teams.a) document.getElementById('persp-a').textContent = `Team A: ${teams.a.name}`;
+  if(teams.b) document.getElementById('persp-b').textContent = `Team B: ${teams.b.name}`;
+}
+
+function getApiHeaders() {
+  return { 'Content-Type': 'application/json' };
+}
+
+function apiUrl() {
+  // If running inside Claude.ai (no worker needed), call Anthropic directly
+  // Otherwise route through the Cloudflare Worker proxy
+  const isClaudeAI = window.location.hostname === 'claude.ai' ||
+                     window.location.hostname === '' ||
+                     window.location.protocol === 'file:';
+  return isClaudeAI ? 'https://api.anthropic.com/v1/messages' : WORKER_URL;
+}
+
+function checkReadyToAnalyse() {
+  document.getElementById('analyse-btn').disabled = !(teams.a && teams.b);
+}
+
+function setPerspective(side) {
+  perspective = side;
+  document.getElementById('persp-a').classList.toggle('active', side === 'a');
+  document.getElementById('persp-b').classList.toggle('active', side === 'b');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// START ANALYSIS
+// ═══════════════════════════════════════════════════════════════
+async function startAnalysis() {
+  document.getElementById('setup-loading').textContent = 'Building match analysis…';
+  document.getElementById('analyse-btn').disabled = true;
+
+  // Build pitch views from formation library
+  pitchViews = getFormations(teams.a, teams.b);
+
+  // Show app screen
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+
+  // Init canvas
+  initPitchCanvas();
+
+  // Set header
+  const cfgA = getRaceConfig(teams.a.race);
+  const cfgB = getRaceConfig(teams.b.race);
+  const myTeam = perspective === 'a' ? teams.a : teams.b;
+  const oppTeam = perspective === 'a' ? teams.b : teams.a;
+
+  document.getElementById('match-title').textContent = `${teams.a.name} vs ${teams.b.name}`;
+  document.getElementById('name-a').textContent = `${teams.a.name} (${teams.a.race})`;
+  document.getElementById('name-b').textContent = `${teams.b.name} (${teams.b.race})`;
+  document.getElementById('dot-a').style.background = cfgA.color;
+  document.getElementById('dot-b').style.background = cfgB.color;
+  document.getElementById('perspective-label').textContent =
+    `Viewing as: ${myTeam.name} coach · Analysis private to your perspective`;
+
+  // Build pitch controls
+  buildPitchControls();
+
+  // Load default view
+  const defaultView = perspective === 'a' ? 'a-offense' : 'b-offense';
+  currentView = defaultView;
+  loadPitchView(defaultView);
+
+  // Build rosters tab
+  buildRosters();
+
+  // Build pitch legend
+  buildLegend(cfgA, cfgB);
+
+  // Start analysis generation
+  generateAnalysis();
+}
+
+function buildPitchControls() {
+  const container = document.getElementById('pitch-controls');
+  const myTeam = perspective === 'a' ? teams.a : teams.b;
+  const oppTeam = perspective === 'a' ? teams.b : teams.a;
+  const mySide = perspective;
+  const oppSide = perspective === 'a' ? 'b' : 'a';
+
+  container.innerHTML = `
+    <button class="ctrl-btn team-a-btn active" id="btn-my-off" onclick="setPitchView('${mySide}-offense','btn-my-off','team-a-btn')">🏉 ${myTeam.name} Offense</button>
+    <button class="ctrl-btn team-a-btn" id="btn-my-def" onclick="setPitchView('${mySide}-defense','btn-my-def','team-a-btn')">🛡 ${myTeam.name} Defense</button>
+    <button class="ctrl-btn team-b-btn" id="btn-opp-off" onclick="setPitchView('${oppSide}-offense','btn-opp-off','team-b-btn')">🏉 ${oppTeam.name} Offense</button>
+    <button class="ctrl-btn team-b-btn" id="btn-opp-def" onclick="setPitchView('${oppSide}-defense','btn-opp-def','team-b-btn')">🛡 ${oppTeam.name} Defense</button>
+    <button class="ctrl-btn" style="border-color:#d4a845;color:#d4a845;" onclick="printFormation()">🖨 Print</button>
+    <button class="ctrl-btn" style="border-color:#c62828;color:#ef9a9a;" onclick="resetPitch()">↺ Reset</button>
+  `;
+}
+
+function setPitchView(view, btnId, btnClass) {
+  currentView = view;
+  loadPitchView(view);
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.classList.add('active'); btn.classList.add(btnClass); }
+}
+
+function resetPitch() {
+  if (!pitchBase.length) return;
+  pitchPlayers = JSON.parse(JSON.stringify(pitchBase));
+  pitchPlayers.forEach(p => {
+    if (!p.onBench) { p.x = cellX(p.col); p.y = cellY(p.row); }
+  });
+  assignBenchSlots();
+  selectedId = null; dragging = null;
+  drawPitch(); showPosLabel(null);
+}
+
+function buildLegend(cfgA, cfgB) {
+  document.getElementById('pitch-legend').innerHTML = `
+    <div class="legend-item"><div class="legend-dot" style="background:${cfgA.color};"></div>${teams.a.race}</div>
+    <div class="legend-item"><div class="legend-dot" style="background:${cfgB.color};"></div>${teams.b.race}</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#388e3c;"></div>Blocker/Big</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#66bb6a;"></div>Blitzer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#aed581;"></div>Ball Carrier</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#5d4037;"></div>Troll/Guard</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff7043;"></div>⚠ Priority</div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CLAUDE API — ANALYSIS GENERATION
+// ═══════════════════════════════════════════════════════════════
+async function generateAnalysis() {
+  document.getElementById('analysis-loading').style.display = 'flex';
+  document.getElementById('analysis-output').style.display = 'none';
+
+  const myTeam = perspective === 'a' ? teams.a : teams.b;
+  const oppTeam = perspective === 'a' ? teams.b : teams.a;
+
+  const myRoster = myTeam.players.map(p =>
+    `#${p.number} ${p.name} (${p.position}) MA${p.ma} ST${p.st} AG${p.ag} PA${p.pa} AV${p.av} — Skills: ${[...(p.skills||[])].join(', ')} — Acquired: ${(p.acquired_skills||[]).join(', ')||'none'} — ${p.experience||''} ${p.spp||0}SPP`
+  ).join('\n');
+
+  const oppRoster = oppTeam.players.map(p =>
+    `#${p.number} ${p.name} (${p.position}) MA${p.ma} ST${p.st} AG${p.ag} PA${p.pa} AV${p.av} — Skills: ${[...(p.skills||[])].join(', ')} — Acquired: ${(p.acquired_skills||[]).join(', ')||'none'} — ${p.experience||''} ${p.spp||0}SPP`
+  ).join('\n');
+
+  const ctv_diff = (myTeam.ctv||0) - (oppTeam.ctv||0);
+  const inducements = ctv_diff < 0 ? `I receive ${Math.abs(ctv_diff)}k in inducements.` :
+                      ctv_diff > 0 ? `My opponent receives ${ctv_diff}k in inducements.` :
+                      'Teams are equal CTV.';
+
+  const prompt = `Expert Blood Bowl coach advice. BB2025 Season 3 rules. NAF/Andy Davo principles (chevron defence, cage grinding, forcing dice, action economy).
+
+MATCH: ${myTeam.name} (${myTeam.race}) vs ${oppTeam.name} (${oppTeam.race})
+PERSPECTIVE: ${myTeam.name} only — private.
+CTV: Mine ${myTeam.ctv?.toLocaleString()||'?'} vs Opp ${oppTeam.ctv?.toLocaleString()||'?'}. ${inducements}
+
+MY ROSTER:
+${myRoster}
+
+OPPONENT:
+${oppRoster}
+
+Respond with concise HTML using ONLY these tags. 2-3 sentences or 3-4 bullets per section max:
+
+<h3>⚡ Win Condition</h3>
+<p>[1-2 sentences on my win condition vs this specific opponent]</p>
+
+<h3>🏉 Offense</h3>
+<h4>Receiving Setup</h4><ul><li>[turn 1 positioning key points]</li></ul>
+<h4>Drive Plan</h4><ul><li>[cage vs spread, key players by number]</li></ul>
+
+<h3>🛡 Defense</h3>
+<h4>Formation</h4><p>[Davo Chevron or alternative, modified how for this opponent]</p>
+<h4>Priorities</h4><ul><li>[blitz targets, coverage]</li></ul>
+
+<h3>⚠ Top 3 Threats</h3>
+<ul><li><strong>#X PlayerName</strong> — threat + counter</li></ul>
+
+<h3>🎯 Priority Order</h3>
+<ol><li>[priority 1]</li><li>[2]</li><li>[3]</li><li>[4]</li><li>[5]</li></ol>
+
+<h3>✅ Do / ❌ Avoid</h3>
+<ul><li>✅ [do this]</li><li>❌ [avoid this]</li></ul>
+
+<h3>💰 Inducements</h3>
+<p>[brief — what to take or N/A]</p>
+
+Name players by # and acquired skills. Note BB2025 changes where relevant. No text outside the HTML tags.`;
+
+  try {
+    const loadingMsgs = [
+      'Analysing roster matchup…',
+      'Consulting BB2025 rulebook…',
+      'Applying NAF principles…',
+      'Building threat analysis…',
+      'Finalising tactical advice…'
+    ];
+    let msgIdx = 0;
+    const msgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % loadingMsgs.length;
+      document.getElementById('analysis-loading-msg').textContent = loadingMsgs[msgIdx];
+    }, 2000);
+
+    const response = await fetch(apiUrl(), {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: 'You are an expert Blood Bowl coach. Respond with HTML content using the structure requested. Be concise — each section 3-5 sentences max. No markdown, no preamble, no postamble.',
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    clearInterval(msgInterval);
+    const data = await response.json();
+    const html = data.content.find(c => c.type === 'text')?.text || '';
+
+    analysisText = html;
+    document.getElementById('analysis-output').innerHTML = `<div class="analysis-content">${html}</div>`;
+    document.getElementById('analysis-loading').style.display = 'none';
+    document.getElementById('analysis-output').style.display = 'block';
+
+  } catch(err) {
+    document.getElementById('analysis-loading').style.display = 'none';
+    document.getElementById('analysis-output').innerHTML = `
+      <div class="danger-box">Analysis generation failed: ${err.message}<br>
+      Please check your connection and try again.</div>`;
+    document.getElementById('analysis-output').style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ROSTERS TAB
+// ═══════════════════════════════════════════════════════════════
+function buildRosters() {
+  const container = document.getElementById('rosters-container');
+  container.innerHTML = buildRosterTable(teams.a) + buildRosterTable(teams.b);
+}
+
+function buildRosterTable(team) {
+  if (!team) return '';
+  const cfg = getRaceConfig(team.race);
+  const rows = (team.players || []).map(p => {
+    const acquired = new Set(p.acquired_skills || []);
+    const skills = (p.skills || []).map(s =>
+      `<span class="skill-pill ${acquired.has(s)?'pill-acq':'pill-base'}">${s}</span>`
+    ).join('');
+    return `<tr>
+      <td><div class="player-name">#${p.number} ${p.name||''}</div><div class="player-pos">${p.position||''}</div></td>
+      <td>
+        <span class="stat-chip">MA${p.ma}</span>
+        <span class="stat-chip">ST${p.st}</span>
+        <span class="stat-chip">AG${p.ag}</span>
+        <span class="stat-chip">PA${p.pa}</span>
+        <span class="stat-chip">AV${p.av}</span>
+      </td>
+      <td>${skills}</td>
+      <td style="font-size:.72rem;color:var(--muted);">${p.spp||0}★ ${p.experience||''}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div>
+    <div class="section-title" style="color:${cfg.color};">
+      ${team.name} — ${team.race.toUpperCase()} (${team.ctv?.toLocaleString()||'?'} CTV)
+    </div>
+    <table class="roster-table">
+      <thead><tr><th>Player</th><th>Stats</th><th>Skills</th><th>XP</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px;font-family:'Barlow Condensed',sans-serif;">
+      Re-rolls: ${team.rerolls||0} · Coach: ${team.coach||'Unknown'}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRINT
+// ═══════════════════════════════════════════════════════════════
+function printFormation() {
+  const myTeam = perspective === 'a' ? teams.a : teams.b;
+  const title = `${myTeam?.name||'Team'} — ${currentView.includes('offense')?'Offense':'Defense'}`;
+  const dataUrl = pitchCanvas.toDataURL('image/png');
+  const rows = pitchPlayers.map(p =>
+    `<tr><td>${p.name}</td><td>${p.label}</td><td>${p.row}</td><td>${colLabel(p.col)}</td></tr>`
+  ).join('');
+
+  const overlay = document.getElementById('print-overlay');
+  overlay.innerHTML = `
+    <h2 style="font-family:'Barlow Condensed',sans-serif;color:#1b5e20;margin:0 0 4px;">${title}</h2>
+    <p style="font-size:.8rem;color:#555;font-family:'Barlow Condensed',sans-serif;margin:0 0 10px;">BB2025 · Andy Davo Labelling System · Private Analysis</p>
+    <img src="${dataUrl}" style="max-width:100%;border:1px solid #ccc;display:block;margin-bottom:12px;"/>
+    <table style="border-collapse:collapse;width:100%;font-size:.75rem;font-family:'Barlow Condensed',sans-serif;">
+      <thead><tr style="background:#1b5e20;color:#fff;">
+        <th style="padding:4px 8px;text-align:left;">Player</th>
+        <th style="padding:4px 8px;text-align:left;">Label</th>
+        <th style="padding:4px 8px;text-align:left;">Row</th>
+        <th style="padding:4px 8px;text-align:left;">Col</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  overlay.style.display = 'block';
+  window.print();
+  setTimeout(() => { overlay.style.display = 'none'; }, 2000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function newMatch() {
+  if (!confirm('Start a new match analysis? Current analysis will be lost.')) return;
+  teams = { a: null, b: null };
+  perspective = 'a';
+  analysisText = '';
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('card-a').classList.remove('loaded');
+  document.getElementById('card-b').classList.remove('loaded');
+  document.getElementById('summary-a').style.display = 'none';
+  document.getElementById('summary-b').style.display = 'none';
+  document.getElementById('upload-a-label').textContent = '📄 Upload TourPlay PDF';
+  document.getElementById('upload-b-label').textContent = '📄 Upload TourPlay PDF';
+  document.getElementById('persp-a').textContent = 'Team A (Your team)';
+  document.getElementById('persp-b').textContent = 'Team B (Opponent)';
+  document.getElementById('analyse-btn').disabled = true;
+  document.getElementById('setup-loading').textContent = '';
+  document.getElementById('pdf-a').value = '';
+  document.getElementById('pdf-b').value = '';
+}
+
+</script>
+
+</body>
+</html>
